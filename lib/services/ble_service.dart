@@ -70,12 +70,15 @@ class BleService {
             if (characteristic.uuid.toString().toLowerCase() == heartRateMeasurementUuid) {
               await characteristic.setNotifyValue(true);
               
-              _characteristicSubscription = characteristic.lastValueStream.listen((value) {
+              _characteristicSubscription = characteristic.onValueReceived.listen((value) {
                 if (value.isNotEmpty) {
                   int heartRate = _parseHeartRate(value);
+                  print('Heart rate received: $heartRate BPM (raw: $value)');
                   _heartRateController.add(heartRate);
                 }
               });
+              
+              print('Successfully subscribed to heart rate notifications');
             }
           }
         }
