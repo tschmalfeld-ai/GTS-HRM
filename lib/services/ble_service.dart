@@ -14,6 +14,8 @@ class BleService {
   BluetoothDevice? _connectedDevice;
   StreamSubscription? _deviceStateSubscription;
   StreamSubscription? _characteristicSubscription;
+  Timer? _pollingTimer;
+  BluetoothCharacteristic? _heartRateCharacteristic;
 
   static const String heartRateServiceUuid = '0000180d-0000-1000-8000-00805f9b34fb';
   static const String heartRateMeasurementUuid = '00002a37-0000-1000-8000-00805f9b34fb';
@@ -82,6 +84,7 @@ class BleService {
             
             if (characteristic.uuid.toString().toLowerCase() == heartRateMeasurementUuid) {
               print('Found Heart Rate Measurement characteristic!');
+              _heartRateCharacteristic = characteristic;
               
               if (characteristic.properties.notify) {
                 print('Setting up notifications...');
@@ -90,7 +93,7 @@ class BleService {
                 _characteristicSubscription = characteristic.onValueReceived.listen((value) {
                   if (value.isNotEmpty) {
                     int heartRate = _parseHeartRate(value);
-                    print('Heart rate received: $heartRate BPM (raw: $value)');
+                    print('Heart rate received via notification: $heartRate BPM (raw: $value)');
                     _heartRateController.add(heartRate);
                   }
                 }, onError: (error) {
@@ -98,6 +101,9 @@ class BleService {
                 });
                 
                 print('Successfully subscribed to heart rate notifications');
+                
+                // Start polling as fallback in case notifications don't work
+                _startPolling();
               } else {
                 print('WARNING: Characteristic does not support notifications!');
               }
@@ -133,6 +139,25 @@ class BleService {
     }
   }
 
+  void _startPolling() {
+    print('Starting polling fallback (reads every 1 second)');
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (_heartRateCharacteristic != null && _connectedDevice != null) {
+        try {
+          var value = await _heartRateCharacteristic!.read();
+          if (value.isNotEmpty) {
+            int heartRate = _parseHeartRate(value);
+            print('Heart rate via polling: $heartRate BPM');
+            _heartRateController.add(heartRate);
+          }
+        } catch (e) {
+          print('Polling read error: $e');
+        }
+      }
+    });
+  }
+
   int _parseHeartRate(List<int> value) {
     if (value.isEmpty) return 0;
     
@@ -154,9 +179,11 @@ class BleService {
   }
 
   void _cleanup() {
+    _pollingTimer?.cancel();
     _characteristicSubscription?.cancel();
     _deviceStateSubscription?.cancel();
     _connectedDevice = null;
+    _heartRateCharacteristic = null;
     _connectionController.add(false);
   }
 
@@ -165,6 +192,7 @@ class BleService {
   BluetoothDevice? get connectedDevice => _connectedDevice;
 
   void dispose() {
+    _pollingTimer?.cancel();
     _heartRateController.close();
     _connectionController.close();
     _characteristicSubscription?.cancel();
