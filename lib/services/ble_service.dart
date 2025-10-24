@@ -50,38 +50,79 @@ class BleService {
 
   Future<void> connectToDevice(BluetoothDevice device) async {
     try {
+      print('Connecting to device: ${device.platformName}');
       await device.connect(timeout: const Duration(seconds: 15));
       _connectedDevice = device;
       
       _deviceStateSubscription = device.connectionState.listen((state) {
+        print('Connection state changed: $state');
         _connectionController.add(state == BluetoothConnectionState.connected);
         if (state == BluetoothConnectionState.disconnected) {
           _cleanup();
         }
       });
 
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(seconds: 2));
       
+      print('Discovering services...');
       List<BluetoothService> services = await device.discoverServices();
+      print('Found ${services.length} services');
+      
+      bool foundHeartRateService = false;
       
       for (var service in services) {
+        print('Service UUID: ${service.uuid}');
         if (service.uuid.toString().toLowerCase() == heartRateServiceUuid) {
+          foundHeartRateService = true;
+          print('Found Heart Rate Service!');
+          
           for (var characteristic in service.characteristics) {
+            print('Characteristic UUID: ${characteristic.uuid}');
+            print('Properties: notify=${characteristic.properties.notify}, read=${characteristic.properties.read}');
+            
             if (characteristic.uuid.toString().toLowerCase() == heartRateMeasurementUuid) {
-              await characteristic.setNotifyValue(true);
+              print('Found Heart Rate Measurement characteristic!');
               
-              _characteristicSubscription = characteristic.onValueReceived.listen((value) {
-                if (value.isNotEmpty) {
-                  int heartRate = _parseHeartRate(value);
-                  print('Heart rate received: $heartRate BPM (raw: $value)');
-                  _heartRateController.add(heartRate);
+              if (characteristic.properties.notify) {
+                print('Setting up notifications...');
+                await characteristic.setNotifyValue(true);
+                
+                _characteristicSubscription = characteristic.onValueReceived.listen((value) {
+                  if (value.isNotEmpty) {
+                    int heartRate = _parseHeartRate(value);
+                    print('Heart rate received: $heartRate BPM (raw: $value)');
+                    _heartRateController.add(heartRate);
+                  }
+                }, onError: (error) {
+                  print('Stream error: $error');
+                });
+                
+                print('Successfully subscribed to heart rate notifications');
+              } else {
+                print('WARNING: Characteristic does not support notifications!');
+              }
+              
+              if (characteristic.properties.read) {
+                try {
+                  print('Attempting to read current value...');
+                  var value = await characteristic.read();
+                  if (value.isNotEmpty) {
+                    int heartRate = _parseHeartRate(value);
+                    print('Read heart rate: $heartRate BPM');
+                    _heartRateController.add(heartRate);
+                  }
+                } catch (e) {
+                  print('Error reading characteristic: $e');
                 }
-              });
-              
-              print('Successfully subscribed to heart rate notifications');
+              }
             }
           }
         }
+      }
+      
+      if (!foundHeartRateService) {
+        print('ERROR: Heart Rate Service not found on this device!');
+        print('Available services: ${services.map((s) => s.uuid.toString()).join(', ')}');
       }
       
       _connectionController.add(true);
