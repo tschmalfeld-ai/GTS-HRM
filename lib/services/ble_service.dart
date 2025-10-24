@@ -20,18 +20,29 @@ class BleService {
 
   Future<List<ScanResult>> scanForDevices({Duration timeout = const Duration(seconds: 4)}) async {
     List<ScanResult> results = [];
+    StreamSubscription? subscription;
     
     try {
+      subscription = FlutterBluePlus.scanResults.listen((scanResults) {
+        results = scanResults;
+      });
+      
       await FlutterBluePlus.startScan(
         timeout: timeout,
         withServices: [Guid(heartRateServiceUuid)],
       );
-
-      await for (var scanResults in FlutterBluePlus.scanResults) {
-        results = scanResults;
-      }
+      
+      await Future.delayed(timeout);
     } catch (e) {
       print('Scan error: $e');
+    } finally {
+      try {
+        await FlutterBluePlus.stopScan();
+      } catch (e) {
+        print('Stop scan error: $e');
+      }
+      
+      await subscription?.cancel();
     }
 
     return results;
