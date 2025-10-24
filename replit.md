@@ -20,13 +20,15 @@ The app is fully implemented with:
 - Complete permission setup for Android and iOS
 
 ## Recent Changes
-- October 24, 2025: Initial project creation
+- October 24, 2025: Initial project creation and GitHub Actions setup
   - Set up Flutter project structure
   - Implemented BLE service for heart rate sensor connectivity
   - Created database helper for storing heart rate data
   - Built three main screens: Dashboard, Scanner, and Graph
   - Configured Android and iOS permissions for BLE
   - Added state management with Provider
+  - Fixed vector_math dependency issue for successful compilation
+  - Set up GitHub Actions for automated APK builds
 
 ## Project Architecture
 
@@ -73,3 +75,9 @@ lib/
 - Heart rate data is stored locally in SQLite for privacy
 - The app requires physical devices for testing as BLE is not available in emulators
 - Permissions must be granted at runtime for Bluetooth scanning and connection
+
+## Building APKs
+- **GitHub Actions**: Automated builds configured - push to GitHub and download APK from Actions artifacts
+- **Local Build**: Run `flutter build apk --release` on your machine with Flutter installed
+- See `BUILD_INSTRUCTIONS.md` for detailed step-by-step guide
+- APK can be installed directly on Android devices for testing with real BLE heart rate sensors
